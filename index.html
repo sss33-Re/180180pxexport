@@ -101,7 +101,7 @@
   .tile-card:hover{ border-color:var(--ink); transform:translateY(-2px); box-shadow:0 4px 0 var(--card-border); }
   .tile-card.selected{ border-color:var(--coral); box-shadow:0 0 0 2px var(--coral); }
   .tile-thumb-wrap{
-    position:relative; aspect-ratio:1/1;
+    position:relative; aspect-ratio:var(--out-ratio, 1/1);
     background:repeating-conic-gradient(#f0ece1 0% 25%, #fbf8f1 0% 50%) 0/14px 14px;
   }
   .tile-thumb-wrap canvas{width:100%; height:100%; display:block;}
@@ -121,6 +121,36 @@
     padding:0; z-index:2; line-height:1;
   }
   .delete-badge:hover{ background:var(--danger-dark, #A83232); transform:scale(1.06); }
+
+  .mode-select{
+    font-family:inherit; font-size:13px; font-weight:700; color:var(--ink);
+    background:var(--card); border:2px solid var(--ink); border-radius:10px; padding:9px 10px;
+  }
+
+  .role-row{ display:flex; gap:6px; padding:0 10px 10px; }
+  .role-btn{
+    flex:1; padding:6px 4px; font-size:11.5px; font-weight:700; border-radius:7px;
+    background:#F3EEE1; color:var(--ink-soft); box-shadow:none; border:1.5px solid transparent;
+  }
+  .role-btn:hover{ background:#e9e2d0; }
+  .role-btn.active{ background:var(--coral); color:#fff; }
+  .role-btn.active.tab-active{ background:var(--teal); }
+
+  .role-tag{
+    position:absolute; top:6px; left:6px; font-size:10px; font-weight:800; color:#fff;
+    padding:2px 6px; border-radius:6px; z-index:2;
+  }
+  .role-tag.main{ background:var(--coral); }
+  .role-tag.tab{ background:var(--teal); top:28px; }
+
+  .count-warning{
+    font-size:12.5px; color:#9A6A1A; background:#FBF0D9; border:1.5px solid #E9CE94;
+    border-radius:10px; padding:8px 12px; margin:0 0 12px;
+  }
+  .size-warning{
+    font-size:12.5px; color:#A83232; background:#FCEBEB; border:1.5px solid #EFC3C3;
+    border-radius:10px; padding:8px 12px; margin:14px 0 0;
+  }
 
   .footer-note{ margin-top:22px; font-size:12.5px; color:var(--ink-soft); text-align:center; }
 
@@ -142,7 +172,7 @@
   .editor-canvas-wrap{
     border:1.5px solid var(--paper-line); border-radius:14px; overflow:hidden;
     background:repeating-conic-gradient(#f0ece1 0% 25%, #fbf8f1 0% 50%) 0/22px 22px;
-    touch-action:none; width:100%; max-width:440px; aspect-ratio:1/1; margin:0 auto 16px;
+    touch-action:none; width:100%; max-width:440px; aspect-ratio:var(--out-ratio, 1/1); margin:0 auto 16px;
   }
   #editorCanvas{width:100%; height:100%; display:block; cursor:crosshair; touch-action:none;}
 
@@ -169,8 +199,12 @@
 <div class="wrap">
 
   <header class="app-header">
-    <h1>スタンプ分割ツール<span>イラストの範囲を自動検出 → 枠を手動調整 → 180×180pxに自動リサイズしてZIP書き出し</span></h1>
+    <h1 id="appTitle">スタンプ分割ツール<span id="appSubtitle">イラストの範囲を自動検出 → 枠を手動調整 → 自動リサイズしてZIP書き出し</span></h1>
     <div class="header-actions">
+      <select id="modeSelect" class="mode-select">
+        <option value="sticker">LINEスタンプ(370×320px以内)</option>
+        <option value="emoji">LINE絵文字(180×180px)</option>
+      </select>
       <input type="file" id="fileInput" accept="image/*">
       <button class="btn-secondary" id="uploadBtn">画像を選ぶ</button>
       <button class="btn-primary" id="exportBtn" disabled>ZIPを書き出す</button>
@@ -180,7 +214,7 @@
   <div class="empty-state" id="emptyState">
     <p class="big">まだ画像がありません</p>
     <p>スタンプの元画像(複数ポーズが並んだ1枚絵)をアップロードすると、イラストごとの範囲を自動で検出します。</p>
-    <p>検出後、枠のサイズや位置を自由に調整でき、最終的に各イラストが縦横比そのままで180×180pxに収まるように自動縮小されます。</p>
+    <p>検出後、枠のサイズや位置を自由に調整でき、最終的に選んだモードの規定サイズに自動リサイズされます。</p>
   </div>
 
   <div class="layout" id="mainLayout">
@@ -200,12 +234,14 @@
       </div>
 
       <h2 id="tileCountLabel">検出結果一覧</h2>
-      <p class="hint-text">サムネイルをタップすると、大きい画面で位置の微調整や消しゴム修正ができます。</p>
+      <p class="hint-text">サムネイルをタップすると、大きい画面で位置の微調整や消しゴム修正ができます。各サムネイルの「★メイン」「▦タブ」ボタンで、メイン画像・タブ画像に使う枠を1つずつ選べます。</p>
+      <p class="count-warning" id="countWarning" style="display:none;"></p>
       <div class="tile-grid" id="tileGrid"></div>
+      <p class="size-warning" id="sizeWarning" style="display:none;"></p>
     </div>
   </div>
 
-  <p class="footer-note">画像はブラウザ内でのみ処理されます。書き出したZIPには、各イラストを縦横比そのまま180×180pxに収めたPNG(透過)が入ります。</p>
+  <p class="footer-note" id="footerNote">画像はブラウザ内でのみ処理されます。書き出したZIPには、各イラストを縦横比そのまま規定サイズに収めたPNG(透過)が入ります。</p>
 </div>
 
 <!-- 拡大編集モーダル -->
@@ -251,15 +287,36 @@
 
 <script>
 (function(){
-  const OUT = 180;
   const EDITOR_SIZE = 440;
   const OVERVIEW_MAX_W = 640;
+  const MAIN_W = 240, MAIN_H = 240;   // LINE規定: メイン画像
+  const TAB_W = 96,  TAB_H = 74;      // LINE規定: トークルームタブ画像
+  const MAX_FILE_BYTES = 1024 * 1024; // LINE規定: 1個あたり1MB以下
+  const ALLOWED_COUNTS = [8,16,24,32,40];
+
+  const MODES = {
+    sticker: {
+      label: 'LINEスタンプ',
+      outW: 370, outH: 320,
+      subtitle: 'イラストの範囲を自動検出 → 枠を手動調整 → 370×320px以内に自動リサイズしてZIP書き出し',
+      footer: '画像はブラウザ内でのみ処理されます。書き出したZIPには、各イラストを縦横比そのまま370×320px以内に収めたPNG(透過)に加え、指定したメイン画像(240×240px)・タブ画像(96×74px)が入ります。'
+    },
+    emoji: {
+      label: 'LINE絵文字',
+      outW: 180, outH: 180,
+      subtitle: 'イラストの範囲を自動検出 → 枠を手動調整 → 180×180pxに自動リサイズしてZIP書き出し',
+      footer: '画像はブラウザ内でのみ処理されます。書き出したZIPには、各イラストを縦横比そのまま180×180pxに収めたPNG(透過)に加え、指定したメイン画像(240×240px)・タブ画像(96×74px)が入ります。'
+    }
+  };
+  let currentMode = 'sticker';
+  let OUT_W = MODES[currentMode].outW;
+  let OUT_H = MODES[currentMode].outH;
 
   let sourceImage = null;
+  let keyedCanvas = null;   // 背景を透明化したフル解像度画像
   let tiles = [];
   let nextId = 1;
   let selectedId = null;
-  let globalMaskCanvas = null;
   let overviewScale = 1;
   let addMode = false;
   let brushSize = 22;
@@ -280,6 +337,12 @@
   const redetectBtn = document.getElementById('redetectBtn');
   const sensitivitySlider = document.getElementById('sensitivitySlider');
   const addModeBtn = document.getElementById('addModeBtn');
+  const modeSelect = document.getElementById('modeSelect');
+  const appTitle = document.getElementById('appTitle');
+  const appSubtitle = document.getElementById('appSubtitle');
+  const footerNote = document.getElementById('footerNote');
+  const countWarning = document.getElementById('countWarning');
+  const sizeWarning = document.getElementById('sizeWarning');
 
   const modalBackdrop = document.getElementById('modalBackdrop');
   const modalTitle = document.getElementById('modalTitle');
@@ -295,6 +358,20 @@
   const shrinkBtn = document.getElementById('shrinkBtn');
   const resetMaskBtn = document.getElementById('resetMaskBtn');
 
+  function applyMode(){
+    const m = MODES[currentMode];
+    OUT_W = m.outW; OUT_H = m.outH;
+    document.documentElement.style.setProperty('--out-ratio', `${OUT_W} / ${OUT_H}`);
+    appSubtitle.textContent = m.subtitle;
+    footerNote.textContent = m.footer;
+    if (sourceImage){
+      renderAllThumbs();
+      if (modalBackdrop.classList.contains('active')) refreshEditorCanvas();
+    }
+  }
+  modeSelect.addEventListener('change', () => { currentMode = modeSelect.value; applyMode(); });
+  applyMode();
+
   uploadBtn.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if (f) loadImageFile(f); });
 
@@ -304,9 +381,6 @@
       const img = new Image();
       img.onload = () => {
         sourceImage = img;
-        globalMaskCanvas = document.createElement('canvas');
-        globalMaskCanvas.width = img.naturalWidth;
-        globalMaskCanvas.height = img.naturalHeight;
         emptyState.style.display = 'none';
         mainLayout.classList.add('active');
         exportBtn.disabled = false;
@@ -317,14 +391,43 @@
     reader.readAsDataURL(file);
   }
 
+  // ---------- 背景の透明化(フル解像度) ----------
+  function buildKeyedCanvas(){
+    const w = sourceImage.naturalWidth, h = sourceImage.naturalHeight;
+    const cvs = document.createElement('canvas'); cvs.width = w; cvs.height = h;
+    const ctx = cvs.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(sourceImage, 0, 0);
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+
+    let hasAlpha = false;
+    for (let i = 3; i < data.length; i += 4 * 97){ if (data[i] < 250){ hasAlpha = true; break; } }
+
+    if (!hasAlpha){
+      const corners = [[0,0],[w-1,0],[0,h-1],[w-1,h-1]];
+      let r=0,g=0,b=0;
+      corners.forEach(([sx,sy]) => { const idx=(sy*w+sx)*4; r+=data[idx]; g+=data[idx+1]; b+=data[idx+2]; });
+      const bg = [r/4, g/4, b/4];
+      const threshold = Number(sensitivitySlider.value);
+      for (let p=0; p<data.length; p+=4){
+        const dr = data[p]-bg[0], dg = data[p+1]-bg[1], db = data[p+2]-bg[2];
+        if (Math.sqrt(dr*dr+dg*dg+db*db) <= threshold) data[p+3] = 0; // 背景 → 透明化
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+    keyedCanvas = cvs;
+  }
+
   // ---------- 自動検出 ----------
   function runDetection(){
     redetectBtn.disabled = true;
     redetectBtn.textContent = '検出中…';
     setTimeout(() => {
+      buildKeyedCanvas();
       const detected = detectIllustrations();
-      tiles = detected.map(r => ({ id: nextId++, x:r.x, y:r.y, w:r.w, h:r.h, edited:false }));
+      tiles = detected.map(r => ({ id: nextId++, x:r.x, y:r.y, w:r.w, h:r.h, edited:false, isMain:false, isTab:false, maskCanvas: makeMask(r.w, r.h) }));
       sortTilesReadingOrder();
+      if (tiles.length){ tiles[0].isMain = true; tiles[0].isTab = true; }
       selectedId = tiles.length ? tiles[0].id : null;
       renderOverview();
       renderAllThumbs();
@@ -341,34 +444,15 @@
     const h = Math.max(1, Math.round(sourceImage.naturalHeight * scale));
     const cvs = document.createElement('canvas'); cvs.width = w; cvs.height = h;
     const ctx = cvs.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(sourceImage, 0, 0, w, h);
+    ctx.drawImage(keyedCanvas, 0, 0, w, h);
     const imgData = ctx.getImageData(0, 0, w, h);
     const data = imgData.data;
-
-    let hasAlpha = false;
-    for (let i = 3; i < data.length; i += 4 * 37){ if (data[i] < 250){ hasAlpha = true; break; } }
-
-    let bg = null;
-    if (!hasAlpha){
-      const corners = [[0,0],[w-1,0],[0,h-1],[w-1,h-1]];
-      let r=0,g=0,b=0;
-      corners.forEach(([sx,sy]) => { const idx=(sy*w+sx)*4; r+=data[idx]; g+=data[idx+1]; b+=data[idx+2]; });
-      bg = [r/4, g/4, b/4];
-    }
-    const threshold = Number(sensitivitySlider.value);
 
     const fg = new Uint8Array(w*h);
     for (let y=0; y<h; y++){
       for (let x=0; x<w; x++){
         const idx = (y*w+x)*4;
-        let isFg;
-        if (hasAlpha){
-          isFg = data[idx+3] > 16;
-        } else {
-          const dr = data[idx]-bg[0], dg = data[idx+1]-bg[1], db = data[idx+2]-bg[2];
-          isFg = Math.sqrt(dr*dr+dg*dg+db*db) > threshold;
-        }
-        fg[y*w+x] = isFg ? 1 : 0;
+        fg[y*w+x] = data[idx+3] > 16 ? 1 : 0;
       }
     }
 
@@ -470,27 +554,50 @@
   function getTile(id){ return tiles.find(t => t.id === id) || null; }
   function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 
-  // ---------- 合成(最終画像) ----------
-  function composeTile(tile, outSize){
+  // 各枠専用の消しゴム用マスク(他の枠と共有しない = 干渉しない)
+  function makeMask(w, h){
     const c = document.createElement('canvas');
-    c.width = outSize; c.height = outSize;
+    c.width = Math.max(1, Math.round(w));
+    c.height = Math.max(1, Math.round(h));
+    return c;
+  }
+
+  // ---------- 合成(最終画像) ----------
+  function composeTile(tile, outW, outH){
+    const c = document.createElement('canvas');
+    c.width = outW; c.height = outH;
     const ctx = c.getContext('2d');
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    const scale = Math.min(outSize / tile.w, outSize / tile.h);
+    const scale = Math.min(outW / tile.w, outH / tile.h);
     const destW = tile.w * scale, destH = tile.h * scale;
-    const destX = (outSize - destW) / 2, destY = (outSize - destH) / 2;
+    const destX = (outW - destW) / 2, destY = (outH - destH) / 2;
 
+    const tmpW = Math.max(1, Math.round(tile.w));
+    const tmpH = Math.max(1, Math.round(tile.h));
     const tmp = document.createElement('canvas');
-    tmp.width = Math.max(1, Math.round(tile.w));
-    tmp.height = Math.max(1, Math.round(tile.h));
+    tmp.width = tmpW; tmp.height = tmpH;
     const tctx = tmp.getContext('2d');
-    tctx.drawImage(sourceImage, tile.x, tile.y, tile.w, tile.h, 0, 0, tmp.width, tmp.height);
+
+    // 枠が画像の外にはみ出す場合、はみ出した範囲は自前で計算して除外する
+    // (drawImageにそのまま範囲外座標を渡すとブラウザによって描画が歪むことがあるため)
+    const kw = keyedCanvas.width, kh = keyedCanvas.height;
+    const srcX = Math.max(0, tile.x), srcY = Math.max(0, tile.y);
+    const srcRight = Math.min(tile.x + tile.w, kw), srcBottom = Math.min(tile.y + tile.h, kh);
+    const srcW = srcRight - srcX, srcH = srcBottom - srcY;
+    if (srcW > 0 && srcH > 0){
+      const ratioX = tmpW / tile.w, ratioY = tmpH / tile.h;
+      const destCropX = (srcX - tile.x) * ratioX;
+      const destCropY = (srcY - tile.y) * ratioY;
+      tctx.drawImage(keyedCanvas, srcX, srcY, srcW, srcH, destCropX, destCropY, srcW*ratioX, srcH*ratioY);
+    }
+
+    if (!tile.maskCanvas) tile.maskCanvas = makeMask(tile.w, tile.h);
     tctx.globalCompositeOperation = 'destination-out';
-    tctx.drawImage(globalMaskCanvas, tile.x, tile.y, tile.w, tile.h, 0, 0, tmp.width, tmp.height);
+    tctx.drawImage(tile.maskCanvas, 0, 0, tile.maskCanvas.width, tile.maskCanvas.height, 0, 0, tmpW, tmpH);
     tctx.globalCompositeOperation = 'source-over';
 
-    ctx.drawImage(tmp, 0, 0, tmp.width, tmp.height, destX, destY, destW, destH);
+    ctx.drawImage(tmp, 0, 0, tmpW, tmpH, destX, destY, destW, destH);
     return c;
   }
 
@@ -502,7 +609,7 @@
     overviewCanvas.height = Math.round(sourceImage.naturalHeight * scale);
     const ctx = overviewCanvas.getContext('2d');
     ctx.clearRect(0,0,overviewCanvas.width, overviewCanvas.height);
-    ctx.drawImage(sourceImage, 0, 0, overviewCanvas.width, overviewCanvas.height);
+    ctx.drawImage(keyedCanvas, 0, 0, overviewCanvas.width, overviewCanvas.height);
 
     tiles.forEach(t => {
       const isSel = t.id === selectedId;
@@ -553,7 +660,10 @@
   }
 
   function hitHandle(t, sourcePt){
-    const hitRadius = 10 / overviewScale;
+    // 画面上で一定の指先サイズになるよう、表示サイズを基準に当たり判定の半径を計算する
+    const rect = overviewCanvas.getBoundingClientRect();
+    const cssToSource = sourceImage.naturalWidth / rect.width;
+    const hitRadius = 14 * cssToSource;
     for (const h of getHandleDefs()){
       const hx = t.x + h.dx*t.w, hy = t.y + h.dy*t.h;
       if (Math.abs(sourcePt.x-hx) <= hitRadius && Math.abs(sourcePt.y-hy) <= hitRadius) return h;
@@ -631,7 +741,7 @@
   function endOverviewDrag(){
     if (ovMode==='draw'){
       if (ovOrigBox.w > 8 && ovOrigBox.h > 8){
-        const nt = { id: nextId++, x: ovOrigBox.x, y: ovOrigBox.y, w: ovOrigBox.w, h: ovOrigBox.h, edited:true };
+        const nt = { id: nextId++, x: ovOrigBox.x, y: ovOrigBox.y, w: ovOrigBox.w, h: ovOrigBox.h, edited:true, isMain:false, isTab:false, maskCanvas: makeMask(ovOrigBox.w, ovOrigBox.h) };
         tiles.push(nt);
         selectedId = nt.id;
         setAddMode(false);
@@ -657,7 +767,19 @@
   // ---------- サムネイル一覧 ----------
   function renderAllThumbs(){
     tileCountLabel.textContent = `検出結果一覧(${tiles.length}個)`;
+
+    if (ALLOWED_COUNTS.includes(tiles.length)){
+      countWarning.style.display = 'none';
+    } else if (tiles.length > 0){
+      countWarning.style.display = 'block';
+      countWarning.textContent = `⚠ 現在${tiles.length}個です。LINEの規定では8/16/24/32/40個のいずれかが必要です。`;
+    } else {
+      countWarning.style.display = 'none';
+    }
+
     tileGrid.innerHTML = '';
+    const thumbW = 220, thumbH = Math.max(1, Math.round(220 * OUT_H / OUT_W));
+
     tiles.forEach((tile, i) => {
       const card = document.createElement('div');
       card.className = 'tile-card';
@@ -666,8 +788,22 @@
       const thumbWrap = document.createElement('div');
       thumbWrap.className = 'tile-thumb-wrap';
       const canvas = document.createElement('canvas');
-      canvas.width = 220; canvas.height = 220;
+      canvas.width = thumbW; canvas.height = thumbH;
       thumbWrap.appendChild(canvas);
+
+      if (tile.isMain){
+        const tag = document.createElement('div');
+        tag.className = 'role-tag main';
+        tag.textContent = 'MAIN';
+        thumbWrap.appendChild(tag);
+      }
+      if (tile.isTab){
+        const tag = document.createElement('div');
+        tag.className = 'role-tag tab';
+        tag.textContent = 'TAB';
+        thumbWrap.appendChild(tag);
+      }
+
       const badge = document.createElement('div');
       badge.className = 'edit-badge';
       badge.textContent = '✎ タップで編集';
@@ -690,6 +826,20 @@
       info.innerHTML = `<span>#${i+1}</span>` + (tile.edited ? '<span class="edited-mark">✓ 編集済み</span>' : '<span></span>');
       card.appendChild(info);
 
+      const roleRow = document.createElement('div');
+      roleRow.className = 'role-row';
+      const mainBtn = document.createElement('button');
+      mainBtn.className = 'role-btn' + (tile.isMain ? ' active' : '');
+      mainBtn.textContent = '★ メイン';
+      mainBtn.addEventListener('click', (evt) => { evt.stopPropagation(); toggleRole(tile.id, 'isMain'); });
+      const tabBtn = document.createElement('button');
+      tabBtn.className = 'role-btn' + (tile.isTab ? ' active tab-active' : '');
+      tabBtn.textContent = '▦ タブ';
+      tabBtn.addEventListener('click', (evt) => { evt.stopPropagation(); toggleRole(tile.id, 'isTab'); });
+      roleRow.appendChild(mainBtn);
+      roleRow.appendChild(tabBtn);
+      card.appendChild(roleRow);
+
       card.addEventListener('click', () => {
         selectedId = tile.id;
         renderOverview();
@@ -706,10 +856,20 @@
     }
   }
 
+  // メイン画像・タブ画像の割り当ては、それぞれ常に1枚だけ選べる
+  function toggleRole(id, role){
+    const tile = getTile(id);
+    if (!tile) return;
+    const turningOn = !tile[role];
+    tiles.forEach(t => { t[role] = false; });
+    tile[role] = turningOn;
+    renderAllThumbs();
+  }
+
   function drawThumb(tile, canvas){
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.drawImage(composeTile(tile, OUT), 0, 0, OUT, OUT, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(composeTile(tile, OUT_W, OUT_H), 0, 0, OUT_W, OUT_H, 0, 0, canvas.width, canvas.height);
   }
 
   function refreshThumbFor(id){
@@ -760,24 +920,26 @@
     const tile = getTile(selectedId);
     if (!tile) return;
     const ctx = editorCanvas.getContext('2d');
-    ctx.clearRect(0,0,EDITOR_SIZE,EDITOR_SIZE);
-    ctx.drawImage(composeTile(tile, OUT), 0, 0, OUT, OUT, 0, 0, EDITOR_SIZE, EDITOR_SIZE);
+    editorCanvas.width = EDITOR_SIZE;
+    editorCanvas.height = Math.round(EDITOR_SIZE * OUT_H / OUT_W);
+    ctx.clearRect(0,0,editorCanvas.width,editorCanvas.height);
+    ctx.drawImage(composeTile(tile, OUT_W, OUT_H), 0, 0, OUT_W, OUT_H, 0, 0, editorCanvas.width, editorCanvas.height);
   }
 
   function editorPointToSource(tile, evt){
     const rect = editorCanvas.getBoundingClientRect();
-    const px = (evt.clientX-rect.left) * (EDITOR_SIZE/rect.width);
-    const py = (evt.clientY-rect.top) * (EDITOR_SIZE/rect.height);
-    const fitScale = Math.min(OUT/tile.w, OUT/tile.h);
+    const px = (evt.clientX-rect.left) * (editorCanvas.width/rect.width);
+    const py = (evt.clientY-rect.top) * (editorCanvas.height/rect.height);
+    const fitScale = Math.min(OUT_W/tile.w, OUT_H/tile.h);
     const destW = tile.w*fitScale, destH = tile.h*fitScale;
-    const destX = (OUT-destW)/2, destY = (OUT-destH)/2;
-    const editorMul = EDITOR_SIZE/OUT;
+    const destX = (OUT_W-destW)/2, destY = (OUT_H-destH)/2;
+    const editorMul = editorCanvas.width/OUT_W;
     const ex0 = destX*editorMul, ey0 = destY*editorMul;
     const localX = (px-ex0) / (fitScale*editorMul);
     const localY = (py-ey0) / (fitScale*editorMul);
     return {
-      x: tile.x + clamp(localX, 0, tile.w),
-      y: tile.y + clamp(localY, 0, tile.h),
+      x: clamp(localX, 0, tile.w),
+      y: clamp(localY, 0, tile.h),
       radius: (brushSize/2) / (fitScale*editorMul)
     };
   }
@@ -806,8 +968,9 @@
   editorCanvas.addEventListener('pointerleave', stopErase);
 
   function eraseAt(tile, evt){
+    if (!tile.maskCanvas) tile.maskCanvas = makeMask(tile.w, tile.h);
     const pt = editorPointToSource(tile, evt);
-    const mctx = globalMaskCanvas.getContext('2d');
+    const mctx = tile.maskCanvas.getContext('2d');
     mctx.fillStyle = 'rgba(0,0,0,1)';
     mctx.beginPath();
     mctx.arc(pt.x, pt.y, pt.radius, 0, Math.PI*2);
@@ -823,9 +986,9 @@
 
   resetMaskBtn.addEventListener('click', () => {
     const tile = getTile(selectedId);
-    if (!tile) return;
-    const mctx = globalMaskCanvas.getContext('2d');
-    mctx.clearRect(tile.x-4, tile.y-4, tile.w+8, tile.h+8);
+    if (!tile || !tile.maskCanvas) return;
+    const mctx = tile.maskCanvas.getContext('2d');
+    mctx.clearRect(0, 0, tile.maskCanvas.width, tile.maskCanvas.height);
     refreshEditorCanvas();
     refreshThumbFor(selectedId);
   });
@@ -857,10 +1020,16 @@
   function deleteTileById(id){
     const idx = tiles.findIndex(t => t.id===id);
     if (idx===-1) return;
+    const removed = tiles[idx];
     const wasModalOpen = modalBackdrop.classList.contains('active') && selectedId===id;
     tiles.splice(idx,1);
     if (selectedId===id){
       selectedId = tiles.length ? tiles[Math.min(idx, tiles.length-1)].id : null;
+    }
+    // メイン/タブに指定していた枠を消した場合、割り当てが消えないよう先頭の枠へ引き継ぐ
+    if (tiles.length){
+      if (removed.isMain && !tiles.some(t=>t.isMain)) tiles[0].isMain = true;
+      if (removed.isTab && !tiles.some(t=>t.isTab)) tiles[0].isTab = true;
     }
     renderOverview(); renderAllThumbs();
     if (wasModalOpen){
@@ -872,27 +1041,83 @@
     if (selectedId!==null) deleteTileById(selectedId);
   });
 
+  // ---------- 1MB以下に収めるための自動軽量化 ----------
+  // 形(ジオメトリ)や透明度には一切触れず、色の階調だけを必要な分だけ落として
+  // PNGの圧縮効率を上げる。アルファ(透過)はそのまま、サイズも変えないため、
+  // 歪みや透過崩れは起きない。
+  function toBlobP(canvas){ return new Promise(res => canvas.toBlob(res, 'image/png')); }
+
+  function posterize(canvas, bitsPerChannel){
+    const w = canvas.width, h = canvas.height;
+    const out = document.createElement('canvas'); out.width = w; out.height = h;
+    const octx = out.getContext('2d');
+    octx.drawImage(canvas, 0, 0);
+    const imgData = octx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+    const levels = Math.pow(2, bitsPerChannel);
+    const step = 255 / (levels - 1);
+    for (let p=0; p<data.length; p+=4){
+      if (data[p+3] === 0) continue; // 完全透明のピクセルは触らない
+      data[p]   = Math.round(Math.round(data[p]/step)*step);
+      data[p+1] = Math.round(Math.round(data[p+1]/step)*step);
+      data[p+2] = Math.round(Math.round(data[p+2]/step)*step);
+    }
+    octx.putImageData(imgData, 0, 0);
+    return out;
+  }
+
+  async function canvasToPngUnderLimit(canvas){
+    let blob = await toBlobP(canvas);
+    if (blob.size <= MAX_FILE_BYTES) return { blob, reduced:false, ok:true };
+    for (const bits of [6,5,4,3,2]){
+      const q = posterize(canvas, bits);
+      blob = await toBlobP(q);
+      if (blob.size <= MAX_FILE_BYTES) return { blob, reduced:true, ok:true };
+    }
+    return { blob, reduced:true, ok:false }; // 最大限軽量化してもなお超過(通常起きない)
+  }
+
   // ---------- ZIP書き出し ----------
   exportBtn.addEventListener('click', async () => {
     if (!tiles.length) return;
     exportBtn.disabled = true;
     const orig = exportBtn.textContent;
     exportBtn.textContent = '書き出し中…';
+    sizeWarning.style.display = 'none';
     try {
       const zip = new JSZip();
-      const pad = String(tiles.length).length;
-      for (let i=0; i<tiles.length; i++){
-        const canvas = composeTile(tiles[i], OUT);
-        const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-        const name = 'sticker_' + String(i+1).padStart(Math.max(2,pad), '0') + '.png';
+      const pad = Math.max(2, String(tiles.length).length);
+      const stillOver = [];
+
+      const addPng = async (canvas, name) => {
+        const { blob, ok } = await canvasToPngUnderLimit(canvas);
+        if (!ok) stillOver.push(`${name}(${(blob.size/1024/1024).toFixed(2)}MB)`);
         zip.file(name, blob);
+      };
+
+      for (let i=0; i<tiles.length; i++){
+        await addPng(composeTile(tiles[i], OUT_W, OUT_H), String(i+1).padStart(pad, '0') + '.png');
       }
+      const mainTile = tiles.find(t => t.isMain);
+      if (mainTile) await addPng(composeTile(mainTile, MAIN_W, MAIN_H), 'main.png');
+      const tabTile = tiles.find(t => t.isTab);
+      if (tabTile) await addPng(composeTile(tabTile, TAB_W, TAB_H), 'tab.png');
+
       const content = await zip.generateAsync({ type:'blob' });
       const url = URL.createObjectURL(content);
       const a = document.createElement('a');
-      a.href = url; a.download = 'stickers_180x180.zip';
+      a.href = url; a.download = `line_${currentMode}_${OUT_W}x${OUT_H}.zip`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 4000);
+
+      if (!mainTile || !tabTile){
+        sizeWarning.style.display = 'block';
+        sizeWarning.textContent = '⚠ メイン画像・タブ画像のどちらかが未指定のため含まれていません。各サムネイルの「★メイン」「▦タブ」ボタンで指定してください。';
+      }
+      if (stillOver.length){
+        sizeWarning.style.display = 'block';
+        sizeWarning.textContent = (sizeWarning.textContent ? sizeWarning.textContent + ' ' : '') + `⚠ 色数を落としても1MBを超えました(非常に複雑な画像の場合のみ起こります): ${stillOver.join(', ')}。イラストをもう少しシンプルにすると収まりやすくなります。`;
+      }
     } finally {
       exportBtn.disabled = false;
       exportBtn.textContent = orig;
