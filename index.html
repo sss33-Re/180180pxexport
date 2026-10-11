@@ -1165,7 +1165,7 @@
     sizeWarning.style.display = 'none';
     try {
       const zip = new JSZip();
-      const pad = Math.max(2, String(tiles.length).length);
+      const pad = 3; // 001, 002, ... の3桁連番
       const stillOver = [];
 
       const addPng = async (canvas, name) => {
