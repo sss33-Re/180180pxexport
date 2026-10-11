@@ -225,10 +225,11 @@
           背景の感度
           <input type="range" id="sensitivitySlider" min="10" max="90" value="35">
         </div>
+        <button class="btn-secondary btn-small" id="fixOverlapBtn">🔧 枠の重なりを自動解消</button>
         <div style="flex:1;"></div>
         <button class="btn-secondary btn-small toggle-btn" id="addModeBtn">＋ 枠を手動で追加</button>
       </div>
-      <p class="hint-text">枠をドラッグで移動、角や辺のハンドルをドラッグでサイズ変更できます。イラストが繋がって1つの枠になってしまう/逆に分かれすぎる場合は「背景の感度」を調整して再検出してください。</p>
+      <p class="hint-text">枠をドラッグで移動、角や辺のハンドルをドラッグでサイズ変更できます。イラストが繋がって1つの枠になってしまう/逆に分かれすぎる場合は「背景の感度」を調整して再検出してください。枠同士の余白が重なって隣のイラストが写り込む場合は「枠の重なりを自動解消」を押してください。</p>
       <div class="overview-wrap">
         <canvas id="overviewCanvas"></canvas>
       </div>
@@ -337,6 +338,7 @@
   const redetectBtn = document.getElementById('redetectBtn');
   const sensitivitySlider = document.getElementById('sensitivitySlider');
   const addModeBtn = document.getElementById('addModeBtn');
+  const fixOverlapBtn = document.getElementById('fixOverlapBtn');
   const modeSelect = document.getElementById('modeSelect');
   const appTitle = document.getElementById('appTitle');
   const appSubtitle = document.getElementById('appSubtitle');
@@ -425,8 +427,9 @@
     setTimeout(() => {
       buildKeyedCanvas();
       const detected = detectIllustrations();
-      tiles = detected.map(r => ({ id: nextId++, x:r.x, y:r.y, w:r.w, h:r.h, edited:false, isMain:false, isTab:false, maskCanvas: makeMask(r.w, r.h) }));
+      tiles = detected.map(r => ({ id: nextId++, x:r.x, y:r.y, w:r.w, h:r.h, content:r.content, edited:false, isMain:false, isTab:false, maskCanvas: makeMask(r.w, r.h) }));
       sortTilesReadingOrder();
+      resolveOverlaps();
       if (tiles.length){ tiles[0].isMain = true; tiles[0].isTab = true; }
       selectedId = tiles.length ? tiles[0].id : null;
       renderOverview();
@@ -526,11 +529,61 @@
       if (b.count < minArea) return;
       const x0 = Math.max(0, b.minX-pad), y0 = Math.max(0, b.minY-pad);
       const x1 = Math.min(w-1, b.maxX+pad), y1 = Math.min(h-1, b.maxY+pad);
-      results.push({ x:x0, y:y0, w:x1-x0+1, h:y1-y0+1 });
+      // content: 余白を足す前の、実際のイラストそのものの範囲(この内側は絶対に削らない)
+      results.push({ x:x0, y:y0, w:x1-x0+1, h:y1-y0+1, content:{ x0:b.minX, y0:b.minY, x1:b.maxX, y1:b.maxY } });
     });
 
     const inv = 1/scale;
-    return results.map(r => ({ x:r.x*inv, y:r.y*inv, w:r.w*inv, h:r.h*inv }));
+    return results.map(r => ({
+      x:r.x*inv, y:r.y*inv, w:r.w*inv, h:r.h*inv,
+      content:{ x0:r.content.x0*inv, y0:r.content.y0*inv, x1:r.content.x1*inv, y1:r.content.y1*inv }
+    }));
+  }
+
+  // ---------- 枠同士の重なり(余白部分)を自動で解消 ----------
+  // 実際のイラスト範囲(content)には絶対に踏み込まず、余白が重なっている
+  // 場合だけ境界線を引き直す。手動で追加した枠(contentなし)は対象外。
+  function resolveOverlaps(){
+    for (let i=0; i<tiles.length; i++){
+      for (let j=i+1; j<tiles.length; j++){
+        const a = tiles[i], b = tiles[j];
+        if (!a.content || !b.content) continue;
+
+        let left = a, right = b;
+        if (b.x < a.x) { left = b; right = a; }
+        const overlapX = (left.x + left.w) - right.x;
+        if (overlapX > 0){
+          let boundary = (left.x + left.w + right.x) / 2;
+          boundary = Math.max(boundary, left.content.x1 + 2);
+          boundary = Math.min(boundary, right.content.x0 - 2);
+          if (boundary > left.content.x1 && boundary < right.content.x0){
+            const newLeftW = boundary - left.x;
+            const newRightW = (right.x + right.w) - boundary;
+            if (newLeftW > 10 && newRightW > 10){
+              left.w = newLeftW;
+              right.x = boundary; right.w = newRightW;
+            }
+          }
+        }
+
+        let top = a, bottom = b;
+        if (b.y < a.y) { top = b; bottom = a; }
+        const overlapY = (top.y + top.h) - bottom.y;
+        if (overlapY > 0){
+          let boundary = (top.y + top.h + bottom.y) / 2;
+          boundary = Math.max(boundary, top.content.y1 + 2);
+          boundary = Math.min(boundary, bottom.content.y0 - 2);
+          if (boundary > top.content.y1 && boundary < bottom.content.y0){
+            const newTopH = boundary - top.y;
+            const newBottomH = (bottom.y + bottom.h) - boundary;
+            if (newTopH > 10 && newBottomH > 10){
+              top.h = newTopH;
+              bottom.y = boundary; bottom.h = newBottomH;
+            }
+          }
+        }
+      }
+    }
   }
 
   function sortTilesReadingOrder(){
@@ -764,6 +817,13 @@
   }
   addModeBtn.addEventListener('click', () => setAddMode(!addMode));
 
+  fixOverlapBtn.addEventListener('click', () => {
+    resolveOverlaps();
+    renderOverview();
+    renderAllThumbs();
+    if (modalBackdrop.classList.contains('active')) refreshEditorCanvas();
+  });
+
   // ---------- サムネイル一覧 ----------
   function renderAllThumbs(){
     tileCountLabel.textContent = `検出結果一覧(${tiles.length}個)`;
@@ -886,10 +946,12 @@
   // ---------- モーダル(拡大編集) ----------
   function openModal(){
     if (selectedId===null) return;
+    cancelErasing();
     modalBackdrop.classList.add('active');
     renderEditor();
   }
   function closeModal(){
+    cancelErasing();
     modalBackdrop.classList.remove('active');
     renderOverview();
     renderAllThumbs();
@@ -903,6 +965,7 @@
   function stepTile(delta){
     const idx = tiles.findIndex(t => t.id===selectedId);
     if (idx===-1 || tiles.length<2) return;
+    cancelErasing();
     const next = (idx + delta + tiles.length) % tiles.length;
     selectedId = tiles[next].id;
     renderOverview();
@@ -945,24 +1008,40 @@
   }
 
   let erasing = false;
+  let erasingTileId = null;
+  let erasingPointerId = null;
+
   editorCanvas.addEventListener('pointerdown', (evt) => {
     const tile = getTile(selectedId);
     if (!tile) return;
     evt.preventDefault();
     editorCanvas.setPointerCapture(evt.pointerId);
     erasing = true;
+    erasingTileId = tile.id;
+    erasingPointerId = evt.pointerId;
     eraseAt(tile, evt);
   });
   editorCanvas.addEventListener('pointermove', (evt) => {
-    if (!erasing) return;
+    // 操作中にタイルが切り替わっていたら、別の枠に誤って描かないよう無視する
+    if (!erasing || selectedId !== erasingTileId) return;
     const tile = getTile(selectedId);
     if (!tile) return;
     evt.preventDefault();
     eraseAt(tile, evt);
   });
   function stopErase(){
-    if (erasing){ erasing=false; refreshThumbFor(selectedId); }
+    if (erasing){
+      erasing = false;
+      if (erasingPointerId !== null){
+        try { editorCanvas.releasePointerCapture(erasingPointerId); } catch(e){}
+      }
+      refreshThumbFor(erasingTileId);
+      erasingTileId = null;
+      erasingPointerId = null;
+    }
   }
+  // タイル切り替えなど、描画中の状態を強制的に打ち切りたいときに使う
+  function cancelErasing(){ stopErase(); }
   editorCanvas.addEventListener('pointerup', stopErase);
   editorCanvas.addEventListener('pointercancel', stopErase);
   editorCanvas.addEventListener('pointerleave', stopErase);
